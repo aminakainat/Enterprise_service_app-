@@ -1,0 +1,100 @@
+workflows:
+  android-release-pipeline:
+    name: Android Enterprise Production Pipeline
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - firebase_credentials
+        - play_store_credentials
+      vars:
+        PACKAGE_NAME: "com.enterprise.fieldservice"
+        FIREBASE_APP_ID_ANDROID: "1:102938475610:android:a1b2c3d4e5f67890"
+
+    triggering:
+      events:
+        - push
+        - tag
+      branch_patterns:
+        - pattern: main
+          include: true
+
+    scripts:
+      - name: Set up Environment & Fetch Dependencies
+        script: |
+          flutter channel stable
+          flutter upgrade
+          flutter pub get
+
+      - name: Static Code Analysis & Linting
+        script: |
+          flutter analyze
+
+      - name: Execute Automated Test Suite
+        script: |
+          flutter test --coverage
+
+      - name: Build Android App Bundle (AAB) for Production
+        script: |
+          flutter build appbundle --release \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER
+
+      - name: Build Android Release APK for Internal Distribution
+        script: |
+          flutter build apk --release \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER
+
+      - name: Deploy to Firebase App Distribution
+        script: |
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            echo "Uploading APK to Firebase App Distribution..."
+            # firebase appdistribution:distribute build/app/outputs/flutter-apk/app-release.apk \
+            #   --app "$FIREBASE_APP_ID_ANDROID" \
+            #   --groups "internal-testers" \
+            #   --release-notes "Automated Codemagic Build #$BUILD_NUMBER"
+          fi
+
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
+      - coverage/lcov.info
+
+    publishing:
+      email:
+        recipients:
+          - devops@enterprise-fieldservice.com
+        notify:
+          success: true
+          failure: true
+      google_play:
+        credentials: $GCP_SERVICE_ACCOUNT_KEY
+        track: internal # internal, alpha, beta, production
+        submit_as_draft: true
+
+  ios-release-pipeline:
+    name: iOS Enterprise Production Pipeline
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+    scripts:
+      - name: Install Dependencies
+        script: |
+          flutter pub get
+      - name: Run Test Suite
+        script: |
+          flutter test
+      - name: Build iOS No-Codesign IPA
+        script: |
+          flutter build ios --release --no-codesign
+
+    artifacts:
+      - build/ios/iphoneos/*.app

@@ -1,0 +1,93 @@
+name: Enterprise Field Service CI/CD Release Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - release/*
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  quality_and_tests:
+    name: Code Quality & Automated Testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Static Code Analysis
+        run: flutter analyze
+
+      - name: Execute Automated Unit & Widget Tests with Coverage
+        run: flutter test --coverage
+
+      - name: Upload Test Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage-report
+          path: coverage/lcov.info
+
+  build_android_release:
+    name: Build Android Production Release Artifacts
+    needs: quality_and_tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Android Release APK
+        run: flutter build apk --release --build-name=1.0.0 --build-number=${{ github.run_number }}
+
+      - name: Build Android Release App Bundle (AAB)
+        run: flutter build appbundle --release --build-name=1.0.0 --build-number=${{ github.run_number }}
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-field-service-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload Release App Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-field-service-aab
+          path: build/app/outputs/bundle/release/app-release.aab

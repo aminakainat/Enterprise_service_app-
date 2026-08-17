@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Craft rules based on data in your Firestore database
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Allow authenticated users to upload and read job proof images
+    match /jobs/{jobId}/proofs/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Allow authenticated users to upload and view profile photos
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Default fallback for authenticated accounts
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
